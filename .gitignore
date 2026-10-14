@@ -1,0 +1,8 @@
+# Raw data: large and re-downloadable with the scripts in data/
+data/*
+!data/*.py
+!data/*.md
+
+# Python
+__pycache__/
+.venv/
