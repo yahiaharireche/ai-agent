@@ -1,6 +1,6 @@
-# Looks at every validation file and writes down what format it really is.
-# The files change format from year to year, so we check each one instead of
-# assuming. The result goes to pipeline/inventory.csv.
+# Looks at every data file and writes down what format it really is.
+# The files change format from year to year and from source to source, so we
+# check each one instead of assuming. The result goes to pipeline/inventory.csv.
 #
 # Run from the project root:  .venv/bin/python pipeline/profile_files.py
 
@@ -10,122 +10,130 @@ import os
 
 import openpyxl
 
-FOLDER = "data/reseau-ferre"
+FOLDERS = [
+    "data/reseau-ferre",
+    "data/reseau-surface",
+    "data/extra",
+    "data/gtfs",
+]
 
-# ** means "look in subfolders too", because the files are nested
-files = glob.glob(FOLDER + "/**/*.csv", recursive=True)
-files = files + glob.glob(FOLDER + "/**/*.txt", recursive=True)
-files = files + glob.glob(FOLDER + "/**/*.xlsx", recursive=True)
-files.sort()
+OUTPUT = "pipeline/inventory.csv"
 
-print("Found " + str(len(files)) + " files")
+# Candidate column separators, with the name we write in the report.
+SEPARATOR_NAMES = {";": "semicolon", "\t": "tab", ",": "comma"}
 
 results = []
 
-for path in files:
-    print("reading " + path)
+for folder in FOLDERS:
+    # ** means "look in subfolders too", because some files are nested
+    files = glob.glob(folder + "/**/*.csv", recursive=True)
+    files = files + glob.glob(folder + "/**/*.txt", recursive=True)
+    files = files + glob.glob(folder + "/**/*.xlsx", recursive=True)
+    files.sort()
 
-    name = os.path.basename(path)
-    size_mb = round(os.path.getsize(path) / 1000000, 1)
+    dataset = os.path.basename(folder)
+    print(dataset + ": " + str(len(files)) + " files")
 
-    # Excel files are not text, so they need a different reader.
-    # There is no encoding or separator to find: the cells are already
-    # separate, and openpyxl handles the decoding for us.
-    if path.endswith(".xlsx"):
-        # read_only means openpyxl gives us one row at a time instead of
-        # loading the whole sheet into memory
-        book = openpyxl.load_workbook(path, read_only=True)
-        sheet = book.active
+    for path in files:
+        print("  reading " + path)
 
-        columns = []
-        n_rows = 0
+        name = os.path.basename(path)
+        size_mb = round(os.path.getsize(path) / 1000000, 1)
 
-        for row in sheet.rows:
-            if n_rows == 0:
-                # the first row holds the column names
-                for cell in row:
-                    columns.append(str(cell.value))
-            n_rows = n_rows + 1
+        # Excel files are not text, so they need a different reader.
+        # There is no encoding or separator to find: the cells are already
+        # separate, and openpyxl handles the decoding for us.
+        if path.endswith(".xlsx"):
+            # read_only means openpyxl gives us one row at a time instead of
+            # loading the whole sheet into memory
+            book = openpyxl.load_workbook(path, read_only=True)
+            sheet = book.active
 
-        book.close()
-        n_rows = n_rows - 1  # the header is not data
+            columns = []
+            n_rows = 0
 
-        results.append([name, size_mb, "excel", "", "", n_rows, "|".join(columns)])
-        continue
+            for row in sheet.rows:
+                if n_rows == 0:
+                    # the first row holds the column names
+                    for cell in row:
+                        columns.append(str(cell.value))
+                n_rows = n_rows + 1
 
-    # --- which encoding? ---
-    # Some files start with a few hidden bytes that say how they are encoded.
-    first_bytes = open(path, "rb").read(3)
+            book.close()
+            n_rows = n_rows - 1  # the header is not data
 
-    if first_bytes[0:2] == b"\xff\xfe":
-        encoding = "utf-16"
-    elif first_bytes[0:2] == b"\xfe\xff":
-        encoding = "utf-16"
-    elif first_bytes[0:3] == b"\xef\xbb\xbf":
-        encoding = "utf-8-sig"
-    else:
-        encoding = "utf-8"
+            results.append([dataset, name, path, size_mb, "excel", "", "",
+                            n_rows, "|".join(columns)])
+            continue
 
-    # --- which separator? ---
-    # Read the first line and see whether tabs or semicolons are more common.
-    file = open(path, encoding=encoding, errors="replace")
-    header = file.readline()
+        # --- which encoding? ---
+        # Some files start with a few hidden bytes that say how they are encoded.
+        first_bytes = open(path, "rb").read(3)
 
-    if header.count("\t") > header.count(";"):
-        separator = "\t"
-        separator_name = "tab"
-    else:
+        if first_bytes[0:2] == b"\xff\xfe":
+            encoding = "utf-16"
+        elif first_bytes[0:2] == b"\xfe\xff":
+            encoding = "utf-16"
+        elif first_bytes[0:3] == b"\xef\xbb\xbf":
+            encoding = "utf-8-sig"
+        else:
+            encoding = "utf-8"
+
+        # --- which separator? ---
+        # Read the first line and count each candidate. A header with 8 columns
+        # has 7 separators, so the most frequent character is the separator.
+        file = open(path, encoding=encoding, errors="replace")
+        header = file.readline()
+
         separator = ";"
-        separator_name = "semicolon"
+        for candidate in SEPARATOR_NAMES:
+            if header.count(candidate) > header.count(separator):
+                separator = candidate
 
-    # --- which column names? ---
-    columns = header.strip().split(separator)
+        separator_name = SEPARATOR_NAMES[separator]
 
-    # --- comma or dot for decimals? ---
-    # Look at the first 20 data rows for a value like 1,5
-    decimal = "."
-    checked = 0
+        # --- which column names? ---
+        columns = header.strip().split(separator)
 
-    for line in file:
-        values = line.strip().split(separator)
-        for value in values:
-            if value.count(",") == 1:
-                left = value.split(",")[0]
-                right = value.split(",")[1]
-                if left.isdigit() and right.isdigit():
-                    decimal = ","
-        checked = checked + 1
-        if checked == 20:
-            break
+        # --- comma or dot for decimals? ---
+        # Look at the first 20 data rows for a value like 1,5
+        decimal = "."
+        checked = 0
 
-    file.close()
+        for line in file:
+            values = line.strip().split(separator)
+            for value in values:
+                if value.count(",") == 1:
+                    left = value.split(",")[0]
+                    right = value.split(",")[1]
+                    if left.isdigit() and right.isdigit():
+                        decimal = ","
+            checked = checked + 1
+            if checked == 20:
+                break
 
-    # --- how many rows? ---
-    n_rows = 0
-    file = open(path, encoding=encoding, errors="replace")
-    for line in file:
-        n_rows = n_rows + 1
-    file.close()
-    n_rows = n_rows - 1  # the first line is the header, not data
+        file.close()
 
-    results.append([
-        name,
-        size_mb,
-        encoding,
-        separator_name,
-        decimal,
-        n_rows,
-        "|".join(columns),
-    ])
+        # --- how many rows? ---
+        n_rows = 0
+        file = open(path, encoding=encoding, errors="replace")
+        for line in file:
+            n_rows = n_rows + 1
+        file.close()
+        n_rows = n_rows - 1  # the first line is the header, not data
+
+        results.append([dataset, name, path, size_mb, encoding, separator_name,
+                        decimal, n_rows, "|".join(columns)])
 
 # --- save everything to one file ---
-output = open("pipeline/inventory.csv", "w", newline="", encoding="utf-8")
+output = open(OUTPUT, "w", newline="", encoding="utf-8")
 writer = csv.writer(output)
-writer.writerow(["filename", "size_mb", "encoding", "separator", "decimal", "n_rows", "columns"])
+writer.writerow(["dataset", "filename", "path", "size_mb", "encoding",
+                 "separator", "decimal", "n_rows", "columns"])
 
 for row in results:
     writer.writerow(row)
 
 output.close()
 
-print("Wrote pipeline/inventory.csv")
+print("Wrote " + OUTPUT + " (" + str(len(results)) + " files)")
