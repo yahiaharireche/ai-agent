@@ -1,164 +1,131 @@
-"""Inspect every validation file and record its actual format.
-
-The yearly files drift in encoding, delimiter, decimal separator and column
-names. This script reads each one and writes what it really contains to
-pipeline/inventory.csv, so the loader can be driven by facts instead of guesses.
-
-Run from the project root:  .venv/bin/python pipeline/profile_files.py
-"""
+# Looks at every validation file and writes down what format it really is.
+# The files change format from year to year, so we check each one instead of
+# assuming. The result goes to pipeline/inventory.csv.
+#
+# Run from the project root:  .venv/bin/python pipeline/profile_files.py
 
 import csv
+import glob
 import os
 
-DATA_DIR = "data/reseau-ferre"
-OUTPUT = "pipeline/inventory.csv"
+import openpyxl
 
-# Tried in order. The first one that decodes the sample wins.
-ENCODINGS = ["utf-8-sig", "utf-8", "cp1252", "latin-1"]
+FOLDER = "data/reseau-ferre"
 
-# Counted in the header line; the most frequent one is the delimiter.
-DELIMITERS = [";", ",", "\t", "|"]
+# ** means "look in subfolders too", because the files are nested
+files = glob.glob(FOLDER + "/**/*.csv", recursive=True)
+files = files + glob.glob(FOLDER + "/**/*.txt", recursive=True)
+files = files + glob.glob(FOLDER + "/**/*.xlsx", recursive=True)
+files.sort()
 
+print("Found " + str(len(files)) + " files")
 
-def find_files(folder):
-    """Return every data file under folder, deepest ones included."""
-    found = []
-    for current_folder, subfolders, filenames in os.walk(folder):
-        for name in filenames:
-            if name.lower().endswith((".csv", ".txt", ".xlsx")):
-                found.append(os.path.join(current_folder, name))
-    found.sort()
-    return found
+results = []
 
+for path in files:
+    print("reading " + path)
 
-# A byte order mark is the file stating its own encoding. It must be checked
-# before anything is tried, because cp1252 and latin-1 map almost every byte to
-# some character and so never raise - they would "successfully" decode a UTF-16
-# file into nonsense.
-BOMS = [
-    (b"\xff\xfe", "utf-16"),
-    (b"\xfe\xff", "utf-16"),
-    (b"\xef\xbb\xbf", "utf-8-sig"),
-]
+    name = os.path.basename(path)
+    size_mb = round(os.path.getsize(path) / 1000000, 1)
 
+    # Excel files are not text, so they need a different reader.
+    # There is no encoding or separator to find: the cells are already
+    # separate, and openpyxl handles the decoding for us.
+    if path.endswith(".xlsx"):
+        # read_only means openpyxl gives us one row at a time instead of
+        # loading the whole sheet into memory
+        book = openpyxl.load_workbook(path, read_only=True)
+        sheet = book.active
 
-def detect_encoding(path):
-    """Return this file's encoding, trusting a byte order mark if present."""
-    sample = open(path, "rb").read(200000)
+        columns = []
+        n_rows = 0
 
-    for marker, encoding in BOMS:
-        if sample.startswith(marker):
-            return encoding
+        for row in sheet.rows:
+            if n_rows == 0:
+                # the first row holds the column names
+                for cell in row:
+                    columns.append(str(cell.value))
+            n_rows = n_rows + 1
 
-    for encoding in ENCODINGS:
-        try:
-            sample.decode(encoding)
-            return encoding
-        except UnicodeDecodeError:
-            continue
-    return "unknown"
+        book.close()
+        n_rows = n_rows - 1  # the header is not data
 
+        results.append([name, size_mb, "excel", "", "", n_rows, "|".join(columns)])
+        continue
 
-def detect_delimiter(header_line):
-    """Return whichever candidate delimiter appears most in the header."""
-    best = ""
-    best_count = 0
-    for delimiter in DELIMITERS:
-        count = header_line.count(delimiter)
-        if count > best_count:
-            best = delimiter
-            best_count = count
-    return best
+    # --- which encoding? ---
+    # Some files start with a few hidden bytes that say how they are encoded.
+    first_bytes = open(path, "rb").read(3)
 
+    if first_bytes[0:2] == b"\xff\xfe":
+        encoding = "utf-16"
+    elif first_bytes[0:2] == b"\xfe\xff":
+        encoding = "utf-16"
+    elif first_bytes[0:3] == b"\xef\xbb\xbf":
+        encoding = "utf-8-sig"
+    else:
+        encoding = "utf-8"
 
-def detect_decimal(rows, columns):
-    """Look for a value like 1,5 — a comma used as a decimal point.
+    # --- which separator? ---
+    # Read the first line and see whether tabs or semicolons are more common.
+    file = open(path, encoding=encoding, errors="replace")
+    header = file.readline()
 
-    Only called once the delimiter is known, so a comma inside a field is
-    genuinely part of the value and not a column separator.
-    """
-    for row in rows:
-        for value in row:
+    if header.count("\t") > header.count(";"):
+        separator = "\t"
+        separator_name = "tab"
+    else:
+        separator = ";"
+        separator_name = "semicolon"
+
+    # --- which column names? ---
+    columns = header.strip().split(separator)
+
+    # --- comma or dot for decimals? ---
+    # Look at the first 20 data rows for a value like 1,5
+    decimal = "."
+    checked = 0
+
+    for line in file:
+        values = line.strip().split(separator)
+        for value in values:
             if value.count(",") == 1:
-                left, right = value.split(",")
-                if left.strip("-").isdigit() and right.isdigit():
-                    return ","
-    return "."
+                left = value.split(",")[0]
+                right = value.split(",")[1]
+                if left.isdigit() and right.isdigit():
+                    decimal = ","
+        checked = checked + 1
+        if checked == 20:
+            break
 
+    file.close()
 
-def count_lines(path, encoding):
-    """Count data rows, excluding the header."""
-    total = 0
+    # --- how many rows? ---
+    n_rows = 0
     file = open(path, encoding=encoding, errors="replace")
     for line in file:
-        total += 1
+        n_rows = n_rows + 1
     file.close()
-    return max(total - 1, 0)
+    n_rows = n_rows - 1  # the first line is the header, not data
 
+    results.append([
+        name,
+        size_mb,
+        encoding,
+        separator_name,
+        decimal,
+        n_rows,
+        "|".join(columns),
+    ])
 
-def profile(path):
-    """Return one inventory row describing this file."""
-    result = {
-        "path": path,
-        "filename": os.path.basename(path),
-        "size_mb": round(os.path.getsize(path) / 1024 / 1024, 2),
-        "extension": os.path.splitext(path)[1].lower(),
-        "encoding": "",
-        "delimiter": "",
-        "decimal": "",
-        "n_columns": 0,
-        "n_rows": 0,
-        "columns": "",
-        "error": "",
-    }
+# --- save everything to one file ---
+output = open("pipeline/inventory.csv", "w", newline="", encoding="utf-8")
+writer = csv.writer(output)
+writer.writerow(["filename", "size_mb", "encoding", "separator", "decimal", "n_rows", "columns"])
 
-    # .xlsx is a zip archive, not text. It needs openpyxl, so it is recorded
-    # here and inspected separately.
-    if result["extension"] == ".xlsx":
-        result["error"] = "xlsx - needs openpyxl"
-        return result
+for row in results:
+    writer.writerow(row)
 
-    result["encoding"] = detect_encoding(path)
-    if result["encoding"] == "unknown":
-        result["error"] = "could not decode"
-        return result
+output.close()
 
-    file = open(path, encoding=result["encoding"], errors="replace")
-    header_line = file.readline()
-    result["delimiter"] = detect_delimiter(header_line)
-
-    # Re-read the header through the csv module so quoted fields are handled.
-    reader = csv.reader([header_line], delimiter=result["delimiter"])
-    columns = next(reader)
-    columns = [c.strip() for c in columns]
-
-    sample_rows = []
-    reader = csv.reader(file, delimiter=result["delimiter"])
-    for row in reader:
-        sample_rows.append(row)
-        if len(sample_rows) >= 50:
-            break
-    file.close()
-
-    result["n_columns"] = len(columns)
-    result["columns"] = "|".join(columns)
-    result["decimal"] = detect_decimal(sample_rows, columns)
-    result["n_rows"] = count_lines(path, result["encoding"])
-    return result
-
-
-files = find_files(DATA_DIR)
-print("Found " + str(len(files)) + " files in " + DATA_DIR)
-
-rows = []
-for path in files:
-    print("  reading " + path)
-    rows.append(profile(path))
-
-output_file = open(OUTPUT, "w", newline="", encoding="utf-8")
-writer = csv.DictWriter(output_file, fieldnames=list(rows[0].keys()))
-writer.writeheader()
-writer.writerows(rows)
-output_file.close()
-
-print("Wrote " + OUTPUT)
+print("Wrote pipeline/inventory.csv")
