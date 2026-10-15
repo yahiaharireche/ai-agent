@@ -162,6 +162,15 @@ def load_one(item):
                     value = clean_date(value)
                 elif uses_decimal_comma and columns[i] == "pourc_validations":
                     value = value.replace(",", ".")
+                elif columns[i] == "nb_vald":
+                    # 2024_T3_NB_FER writes 2093 as "2 093", using a space as
+                    # the thousands separator. Only strip the spaces when what
+                    # remains is a number, so "Moins de 5" is left alone: that
+                    # is a suppressed count, not a formatting problem, and it
+                    # must stay visible rather than be quietly turned into one.
+                    compact = value.replace(" ", "")
+                    if compact.isdigit():
+                        value = compact
 
             clean_row.append(value)
 
