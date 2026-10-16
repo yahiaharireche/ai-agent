@@ -86,3 +86,44 @@ matches rows outside its stated period.
 | Validations with no station | per station | 9.3M, under five different markers |
 | Station with a placeholder id | per station | 15.3M, resolved via station code |
 | Fare labels relabelled 2023-07-01 | per category | see decision 2 |
+
+## 6. Hourly profiles are kept whole, and marked when inconsistent
+
+The hourly tables give each hour's share of a typical day's taps. They have
+no date: the half-year or quarter is only in the file name, so the period is
+recovered from it.
+
+A profile should add up to 100%. Measured:
+
+| | Profiles | Add up to 99-101% | Over 101% | Under 99% |
+|---|---|---|---|---|
+| Rail | 94,772 | 99.8% | 149 | 84 |
+| Bus and tram | 147,371 | 97.7% | 3,004 | 353 |
+
+Over 101% almost always means several profiles stacked under one key, with
+the same hour listed more than once (e.g. Porte de Clichy, up to 845%). Under
+99% means hours are missing. Neither can be repaired, so every row is kept,
+`profile_ok` marks the usable ones, and a warning covers the rest.
+
+Splitting profiles by operator was tried and changed nothing (99.8% either
+way), so that was not the cause.
+
+Missing hours mean zero taps (stations closed at night), not unknown.
+
+## 7. One database file for the AI
+
+`data/model/ridership.duckdb` holds the four fact tables, the station, line
+and ticket-type tables, and the warnings. Built by `model/build_*.py`.
+
+- **Rows and taps are checked in = out** for every table; the build deletes
+  the file if any differ.
+- **Warnings refer to the final tables**, so the AI checks them against what
+  it actually queries. `warnings_between(start, end)` returns the warnings
+  for a period. The build rejects a warning whose stated period is more than
+  a month wider than the rows it covers, so no warning is shown for years it
+  does not affect.
+- **Every table and column has a plain-English description** stored in the
+  database (`descriptions.csv`). The build stops if any is missing.
+
+Checked by asking real questions: metro and train taps per year match the
+earlier results exactly, for all eleven years.
