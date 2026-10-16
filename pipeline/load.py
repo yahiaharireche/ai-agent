@@ -52,6 +52,24 @@ def clean_name(name, dataset):
     return name
 
 
+def is_id_column(name):
+    """True for columns that hold identifiers rather than measurements."""
+    return name == "zone_id" or name.startswith("id_") or name.startswith("code_")
+
+
+def clean_id(value):
+    """Turn 412687.0 into 412687.
+
+    2024_T4_NB_FER and the offre_hebdomadaire files write whole-number IDs as
+    decimals. To a database "412687" and "412687.0" are two different IDs, so
+    every place in those files was counted twice. Only applied to identifier
+    columns: in a measure, 12.0 is a real decimal and is left alone.
+    """
+    if value.endswith(".0") and value[:-2].lstrip("-").isdigit():
+        return value[:-2]
+    return value
+
+
 def clean_date(value):
     """Turn a date into YYYY-MM-DD, whatever shape it arrived in.
 
@@ -112,8 +130,11 @@ def load_one(item):
 
     for old in old_columns:
         new = clean_name(old, item["dataset"])
-        if new == "zone_id":
-            # remember which spelling this file actually used
+        if new == "zone_id" and item["dataset"] in ("reseau-ferre",
+                                                  "reseau-surface"):
+            # remember which spelling this file actually used. Only for
+            # validation files: GTFS stops has its own zone_id column
+            # (a fare zone), which is a different thing.
             zone_id_source = old.strip().lower()
         columns.append(new)
 
@@ -171,6 +192,8 @@ def load_one(item):
                     compact = value.replace(" ", "")
                     if compact.isdigit():
                         value = compact
+                elif is_id_column(columns[i]):
+                    value = clean_id(value)
 
             clean_row.append(value)
 

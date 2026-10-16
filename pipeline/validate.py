@@ -54,16 +54,22 @@ def find_files(dataset, keyword):
 def source(files):
     """A DuckDB expression reading this exact list of files as one table.
 
-    The format is stated rather than auto-detected. DuckDB samples the first
-    20,480 rows to guess, and in 2023_T1_NB_SURFACE the first quoted value is
-    at line 312,143 - so it concluded the file had no quoting and then split
-    a station name containing a comma into an extra column.
+    Nothing is auto-detected. DuckDB guesses formats and types from the first
+    20,480 rows, and both guesses have been wrong here:
+
+    - quoting: in 2023_T1_NB_SURFACE the first quoted value is at line
+      312,143, so it decided there was none and split a station name
+      containing a comma into an extra column;
+    - types: zone_id looks numeric until 2016S2_PROFIL_FER line 35,012,
+      which holds '?', so a numeric column failed mid-read.
+
+    So the format is stated and every column is read as text.
     """
     quoted = []
     for path in files:
         quoted.append("'" + path + "'")
     return ("read_csv([" + ", ".join(quoted) + "], union_by_name=true,"
-            " delim=',', quote='\"', escape='\"', header=true)")
+            " delim=',', quote='\"', escape='\"', header=true, all_varchar=true)")
 
 
 # How many rows the profiler counted in each source file.
@@ -170,7 +176,17 @@ for label, dataset, keyword in GROUPS:
         check("encoding", mangled == 0,
               str(mangled) + " mangled values in " + text_column)
 
-    # --- 5. which original spellings of the key column appear ---
+    # --- 5. identifiers are written one way only ---
+    # 412687 and 412687.0 are the same place, but count as two distinct IDs.
+    if "zone_id" in names:
+        decimal_ids = db.sql(
+            "SELECT COUNT(*) FROM " + table +
+            " WHERE regexp_full_match(CAST(zone_id AS VARCHAR), '-?[0-9]+\\.0')"
+        ).fetchone()[0]
+        check("id format", decimal_ids == 0,
+              str(decimal_ids) + " zone_id values written as decimals")
+
+    # --- 6. which original spellings of the key column appear ---
     if "zone_id_source" in names:
         spellings = db.sql("SELECT DISTINCT zone_id_source FROM " + table +
                            " ORDER BY 1").fetchall()
