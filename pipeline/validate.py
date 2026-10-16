@@ -13,6 +13,9 @@ import duckdb
 
 INVENTORY = "pipeline/inventory.csv"
 
+# What IDFM writes instead of a count below five, to avoid identifying anyone.
+SUPPRESSED = "Moins de 5"
+
 # Each group is a set of clean files that share a schema, so they can be
 # queried as one table. Files are matched on a lowercased substring rather
 # than a glob, because the source filenames are inconsistent: 2018_S2_NB_Fer
@@ -132,12 +135,27 @@ for label, dataset, keyword in GROUPS:
         measure = "pourc_validations"
 
     if measure in names:
-        nulls, negatives = db.sql(
+        # SUPPRESSED is the marker IDFM puts in place of a count below five.
+        # It is real data, not a defect in our loading, so it must not fail
+        # the check - but anything else that will not parse as a number is a
+        # value we have silently lost, and must.
+        nulls, negatives, unparseable, suppressed = db.sql(
             "SELECT COUNT(*) FILTER (WHERE " + measure + " IS NULL),"
             "       COUNT(*) FILTER (WHERE TRY_CAST(" + measure +
-            " AS DOUBLE) < 0) FROM " + table).fetchone()
-        check(measure, nulls == 0 and negatives == 0,
-              str(nulls) + " null, " + str(negatives) + " negative")
+            " AS DOUBLE) < 0),"
+            "       COUNT(*) FILTER (WHERE TRY_CAST(" + measure +
+            " AS DOUBLE) IS NULL AND CAST(" + measure +
+            " AS VARCHAR) <> '" + SUPPRESSED + "'),"
+            "       COUNT(*) FILTER (WHERE CAST(" + measure + " AS VARCHAR) = '" +
+            SUPPRESSED + "') FROM " + table).fetchone()
+
+        check(measure, nulls == 0 and negatives == 0 and unparseable == 0,
+              str(nulls) + " null, " + str(negatives) + " negative, " +
+              str(unparseable) + " unparseable")
+
+        # Not a pass or fail: a number the reader has to know about.
+        print("  NOTE  suppressed   " + format(suppressed, ",") +
+              " rows recorded as '" + SUPPRESSED + "'")
 
     # --- 4. no mangled characters from a wrong encoding ---
     text_column = ""
