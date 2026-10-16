@@ -1,0 +1,17 @@
+label,category,mapping,evidence
+NAVIGO,Navigo,exact,53.4% of rail validations in 2023-H1; Forfait Navigo 52.0% in 2023-H2
+Forfait Navigo,Navigo,exact,label used from 2023-07-01
+IMAGINE R,Imagine R,exact,21.5% in 2023-H1; Imagine R 21.2% in 2023-H2
+Imagine R,Imagine R,exact,label used from 2023-07-01
+AMETHYSTE,Amethyste,exact,2.2% in 2023-H1; Amethyste 2.2% in 2023-H2
+Amethyste,Amethyste,exact,label used from 2023-07-01
+NON DEFINI,Non défini,exact,2.6% before and after 2023-07-01
+TST,Solidarité,merged,TST 7.8% + FGT 3.1% = 10.9% in 2023-H1; Contrat Solidarité Transport 13.7% in 2023-H2
+FGT,Solidarité,merged,see TST
+Contrat Solidarité Transport,Solidarité,merged,label used from 2023-07-01; also absorbed part of ?
+Contrat Solidarite Transport,Solidarité,merged,unaccented spelling of the same label
+AUTRE TITRE,Autres titres,approximate,6.8% in 2023-H1; Autres titres 7.8% in 2023-H2
+Autres titres,Autres titres,approximate,label used from 2023-07-01
+NAVIGO JOUR,Forfaits courts,approximate,0.3% in 2023-H1; Forfaits courts 0.5% in 2023-H2
+Forfaits courts,Forfaits courts,approximate,label used from 2023-07-01
+?,Inconnu,no_successor,2.3% in 2023-H1; no matching label after 2023-07-01

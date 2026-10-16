@@ -30,6 +30,7 @@ ALIASES = {
     "id_refa_lda": "zone_id",
     "id_zdc": "zone_id",
     "pourcentage_validations": "pourc_validations",
+    "id_groupofligne": "id_groupoflines",  # 2025_T2_NB_SURFACE drops the s
 }
 
 # Timetable and map geometry: 14.6M rows we have no question for. Remove these
