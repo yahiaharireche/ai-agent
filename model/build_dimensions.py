@@ -68,7 +68,11 @@ db.sql("""
         WHERE s.code_stif_arret NOT IN ('', 'ND')
         GROUP BY 1
     )
-    SELECT s.zone_id,
+    -- station_key is a plain number, one per (zone_id, station code) pair, in a
+    -- fixed order so a rebuild gives every entry the same key. The fact tables
+    -- store it, so they join on one clean column instead of two raw ones.
+    SELECT row_number() OVER (ORDER BY s.zone_id, s.code_stif_arret) AS station_key,
+           s.zone_id,
            s.code_stif_arret,
            CASE WHEN direct.id IS NOT NULL THEN direct.id
                 WHEN v.station_id IS NOT NULL THEN v.station_id END AS station_id,
@@ -113,7 +117,9 @@ db.sql("""
         FROM surface
         GROUP BY 1
     )
-    SELECT s.id_groupoflines,
+    -- line_key: one plain number per line id, in a fixed order (see station_key)
+    SELECT row_number() OVER (ORDER BY s.id_groupoflines) AS line_key,
+           s.id_groupoflines,
            r.line_name,
            r.transport_mode,
            r.operator,

@@ -124,6 +124,18 @@ and ticket-type tables, and the warnings. Built by `model/build_*.py`.
   does not affect.
 - **Every table and column has a plain-English description** stored in the
   database (`descriptions.csv`). The build stops if any is missing.
+- **The links between tables are declared as keys.** `dim_station`,
+  `dim_line` and `dim_fare_category` have primary keys (`station_key`,
+  `line_key`, `label`); the fact tables store them as foreign keys, so the
+  database refuses a fact row that points to nothing. The two-column station
+  match (with its `coalesce(..., '')`) now happens only once, in the build;
+  queries join on one clean key. The cost, measured on rail daily: loading
+  goes from 0.6 s to 48 s and those columns take about 6 times the space
+  (the database is 1.9 GB instead of about 0.7 GB). Accepted, because the
+  full build still takes a few minutes and the links cannot silently break.
+- **Hourly profile totals are rounded to 6 decimals** before the 99-101%
+  check. 92 bus and tram rows sit exactly on the 99% line, and adding the same
+  decimals in a different order tipped them either side between rebuilds.
 
 Checked by asking real questions: metro and train taps per year match the
 earlier results exactly, for all eleven years.

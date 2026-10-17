@@ -3,6 +3,7 @@ fact_rail_daily,,"Metro and train taps: one row per day, per station, per ticket
 fact_rail_daily,date,Day the taps happened. A transport day runs from 04:00 to 03:59 the next morning.
 fact_rail_daily,year,Year of date.
 fact_rail_daily,month,"Month of date, 1-12."
+fact_rail_daily,station_key,"Key of the station in dim_station. Declared as a foreign key, so it always points to a real entry there. Join on this column."
 fact_rail_daily,station_id,"Official station id. Use this, not names, to group by station. Empty when the station is unknown or unmatched."
 fact_rail_daily,station_name,"Official station name, as it is today (from the official station list, 2026). A station renamed since then appears under its current name."
 fact_rail_daily,station_match,"How the station was identified: exact_id (id found in the official list), via_station_code (id changed over time; linked through the station code), unknown_station (IDFM did not know the station), unmatched (no official station found)."
@@ -10,7 +11,7 @@ fact_rail_daily,station_id_in_source,Station id exactly as written in IDFM's fil
 fact_rail_daily,station_code_in_source,"IDFM's station code exactly as written in its file. ND means unknown."
 fact_rail_daily,station_name_in_source,"Station name exactly as written in IDFM's file. Spelling varies across years; do not group by it."
 fact_rail_daily,operator_code,IDFM's numeric code for the transport company. Its meaning is not documented in the data.
-fact_rail_daily,ticket_label,"Ticket type exactly as written in IDFM's file. The labels changed on 2023-07-01; use ticket_category to compare across that date."
+fact_rail_daily,ticket_label,"Ticket type exactly as written in IDFM's file. The labels changed on 2023-07-01; use ticket_category to compare across that date. Declared as a foreign key to dim_fare_category.label."
 fact_rail_daily,ticket_category,"Ticket type grouped so it can be compared across the 2023-07-01 relabelling, e.g. Navigo, Imagine R, Solidarité."
 fact_rail_daily,ticket_category_mapping,"How reliably ticket_category follows this ticket type across 2023-07-01: exact, merged (several old types became one), approximate, or no_successor."
 fact_rail_daily,taps,"Number of taps. Empty when IDFM hid a count below five (see was_hidden): unknown, not zero. SUM ignores empty values."
@@ -20,6 +21,7 @@ fact_surface_daily,,"Bus and tram taps: one row per day, per line, per ticket ty
 fact_surface_daily,date,Day the taps happened. A transport day runs from 04:00 to 03:59 the next morning.
 fact_surface_daily,year,Year of date.
 fact_surface_daily,month,"Month of date, 1-12."
+fact_surface_daily,line_key,"Key of the line in dim_line. Declared as a foreign key, so it always points to a real entry there. Join on this column."
 fact_surface_daily,line_id,"Official line id. Use this, not names, to group by line. ? and A00000 mean the line is unknown."
 fact_surface_daily,line_name,"Official line name, as it is today (from the official line list, 2026). Empty for lines not in that list."
 fact_surface_daily,transport_mode,"Bus or tram, from the official line list. Empty for lines not in that list."
@@ -28,7 +30,7 @@ fact_surface_daily,line_match,"How the line was identified: exact_id (found in t
 fact_surface_daily,line_name_in_source,"Line name exactly as written in IDFM's file. Spelling varies; do not group by it."
 fact_surface_daily,line_code_in_source,IDFM's line code as written in its file. It does not match the official line list; use line_id instead.
 fact_surface_daily,operator_code,IDFM's numeric code for the transport company. Its meaning is not documented in the data.
-fact_surface_daily,ticket_label,"Ticket type exactly as written in IDFM's file. The labels changed on 2023-07-01; use ticket_category to compare across that date."
+fact_surface_daily,ticket_label,"Ticket type exactly as written in IDFM's file. The labels changed on 2023-07-01; use ticket_category to compare across that date. Declared as a foreign key to dim_fare_category.label."
 fact_surface_daily,ticket_category,"Ticket type grouped so it can be compared across the 2023-07-01 relabelling, e.g. Navigo, Imagine R, Solidarité."
 fact_surface_daily,ticket_category_mapping,"How reliably ticket_category follows this ticket type across 2023-07-01: exact, merged, approximate, or no_successor."
 fact_surface_daily,taps,"Number of taps. Empty when IDFM hid a count below five (see was_hidden): unknown, not zero. SUM ignores empty values."
@@ -38,6 +40,7 @@ fact_rail_hourly,,"Share of a typical day's metro and train taps in each hour, p
 fact_rail_hourly,period_start,First day of the half-year or quarter this profile describes.
 fact_rail_hourly,period_end,Last day of the half-year or quarter this profile describes.
 fact_rail_hourly,year,Year of period_start.
+fact_rail_hourly,station_key,"Key of the station in dim_station. Declared as a foreign key. Join on this column."
 fact_rail_hourly,station_id,"Official station id. Use this, not names, to group by station."
 fact_rail_hourly,station_name,"Official station name, as it is today."
 fact_rail_hourly,station_match,"How the station was identified: exact_id, via_station_code, unknown_station or unmatched."
@@ -55,6 +58,7 @@ fact_surface_hourly,,"Share of a typical day's bus and tram taps in each hour, p
 fact_surface_hourly,period_start,First day of the half-year or quarter this profile describes.
 fact_surface_hourly,period_end,Last day of the half-year or quarter this profile describes.
 fact_surface_hourly,year,Year of period_start.
+fact_surface_hourly,line_key,"Key of the line in dim_line. Declared as a foreign key. Join on this column."
 fact_surface_hourly,line_id,"Official line id. Use this, not names, to group by line."
 fact_surface_hourly,line_name,"Official line name, as it is today."
 fact_surface_hourly,transport_mode,"Bus or tram, from the official line list."
@@ -69,6 +73,7 @@ fact_surface_hourly,source_file,IDFM file this row came from; the period comes f
 fact_surface_hourly,profile_total_pct,"Sum of share_pct over the whole profile this row belongs to. Should be about 100."
 fact_surface_hourly,profile_ok,"True when the profile adds up to 99-101% and lists each hour once. False profiles are stacked or incomplete and should be excluded."
 dim_station,,"Every station identifier found in the tap data, with the official station it was matched to and how. Already joined into the fact tables; useful for listing stations or checking how a name was found."
+dim_station,station_key,"Primary key: one plain number per station identifier found in the tap data. The fact tables store it."
 dim_station,zone_id,"Station id as written in the tap data; empty values stored as ''."
 dim_station,code_stif_arret,"IDFM station code as written in the tap data; empty values stored as ''."
 dim_station,station_id,Official station id it was matched to.
@@ -79,6 +84,7 @@ dim_station,first_seen,"First date this identifier appears in the tap data, as Y
 dim_station,last_seen,"Last date this identifier appears in the tap data, as YYYY-MM-DD."
 dim_station,validations,Total taps recorded under this identifier.
 dim_line,,"Every bus and tram line identifier found in the tap data, with the official line it was matched to and how."
+dim_line,line_key,"Primary key: one plain number per line identifier found in the tap data. The fact tables store it."
 dim_line,id_groupoflines,"Line id as written in the tap data; empty values stored as ''."
 dim_line,line_name,"Official line name, as it is today."
 dim_line,transport_mode,Bus or tram.
@@ -89,7 +95,7 @@ dim_line,first_seen,"First date this line appears in the tap data, as YYYY-MM-DD
 dim_line,last_seen,"Last date this line appears in the tap data, as YYYY-MM-DD."
 dim_line,validations,Total taps recorded on this line.
 dim_fare_category,,"Every ticket type label in the tap data, and the category it belongs to across the 2023-07-01 relabelling. The mapping was decided from each type's share of taps before and after the change."
-dim_fare_category,label,Ticket type exactly as written in IDFM's file.
+dim_fare_category,label,"Primary key: ticket type exactly as written in IDFM's file."
 dim_fare_category,category,Ticket type grouped so it can be compared across 2023-07-01.
 dim_fare_category,mapping,"exact, merged, approximate or no_successor."
 dim_fare_category,evidence,The share of taps before and after 2023-07-01 that justifies the mapping.
