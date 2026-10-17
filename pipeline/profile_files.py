@@ -16,10 +16,10 @@ import os
 import openpyxl
 
 FOLDERS = [
-    "data/reseau-ferre",
-    "data/reseau-surface",
-    "data/extra",
-    "data/gtfs",
+    "data/raw/reseau-ferre",
+    "data/raw/reseau-surface",
+    "data/raw/extra",
+    "data/raw/gtfs",
 ]
 
 OUTPUT = "pipeline/inventory.csv"

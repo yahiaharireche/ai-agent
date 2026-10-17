@@ -1,8 +1,10 @@
+# Run from the project root:  .venv/bin/python ingest/download_extra.py
+
 import urllib.request
 import gzip
 import os
 
-os.makedirs("extra", exist_ok=True)
+os.makedirs("data/raw/extra", exist_ok=True)
 
 datasets = [
     "arrets",
@@ -27,7 +29,7 @@ for name in datasets:
     if data[:2] == b"\x1f\x8b":
         data = gzip.decompress(data)
 
-    out_path = "extra/" + name + ".csv"
+    out_path = "data/raw/extra/" + name + ".csv"
     f = open(out_path, "wb")
     f.write(data)
     f.close()

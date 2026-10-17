@@ -1,7 +1,5 @@
-# Raw data: large and re-downloadable with the scripts in data/
-data/*
-!data/*.py
-!data/*.md
+# All data: large, and rebuilt by the scripts in ingest/, pipeline/ and model/
+data/
 
 # Python
 __pycache__/
